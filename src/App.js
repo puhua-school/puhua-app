@@ -90,7 +90,8 @@ const LoginPage = ({ onLogin, users }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 px-8 justify-center animate-in fade-in duration-700">
+    <div className="flex flex-col min-h-screen bg-slate-50px-4 py-8sm:px-8 sm:py-0
+                    justify-center animate-in fade-in duration-700">
       <div className="mb-10 text-center">
         <div className="mx-auto flex items-center justify-center mb-6">
           <img
@@ -108,7 +109,7 @@ const LoginPage = ({ onLogin, users }) => {
 
 
         </div>
-        <h1 className="text-3xl font-black text-gray-900 tracking-tighter">Puhua Maintenance</h1>
+        <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tighter">Puhua Maintenance</h1>
         <p className="text-gray-400 mt-2 text-sm font-medium">Silakan masuk untuk melapor</p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -416,11 +417,21 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-200 flex items-center justify-center p-0 sm:p-4 font-sans">
-      <div className="w-full max-w-md bg-white h-[844px] shadow-2xl overflow-hidden sm:rounded-[3rem] border-0 sm:border-[12px] border-slate-900 relative flex flex-col">
-
+    <div className="min-h-screen bg-slate-100 font-sans">
+      <div className="
+    min-h-screen
+    bg-white
+    flex flex-col
+    max-w-full
+    sm:max-w-md
+    sm:mx-auto
+    sm:my-6
+    sm:rounded-3xl
+    sm:shadow-2xl
+    overflow-hidden
+  ">
         {/* Header */}
-        <div className="bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-20">
+        <div className="bg-white/80 backdrop-blur-md border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4 flex justify-between items-center sticky top-0 z-20">
           <button onClick={() => setMenuOpen(true)} className="p-2 -ml-2 hover:bg-slate-50 rounded-xl transition-colors active:scale-90">
             <Menu size={24} className="text-slate-700" />
           </button>
@@ -438,7 +449,7 @@ export default function App() {
         {menuOpen && (
           <div className="absolute inset-0 z-50 flex">
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-opacity" onClick={() => setMenuOpen(false)} />
-            <div className="w-[70%] bg-white h-full z-50 shadow-2xl flex flex-col animate-in slide-in-from-left">
+            <div className="w-[85%] sm:w-[70%] max-w-xs bg-white h-full z-50 shadow-2xl flex flex-col animate-in slide-in-from-left">
               <div className="p-6 bg-blue-700 text-white flex items-center gap-4">
                 <div className="w-16 h-16 shrink-0 bg-white/10 p-2 rounded-2xl border border-white/20 backdrop-blur-sm">
                   <img src="/image/puhua_logo.png" alt="Logo" className="w-full h-full object-contain" />
@@ -497,7 +508,7 @@ export default function App() {
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto bg-slate-50 p-6 pb-20 no-scrollbar">
+        <div className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 pb-20 no-scrollbar">
           {selected ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
               <button onClick={() => setSelected(null)} className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase tracking-widest mb-2 active:scale-95 transition-transform">
@@ -563,18 +574,18 @@ export default function App() {
                   <h2 className="text-2xl font-black mb-1 leading-tight">Halo, {user.pemilik_name}</h2>
                   <p className="text-slate-400 text-sm font-medium">Sistem siap menerima laporan Anda.</p>
                 </div>
-                <img src="/image/puhua_logo.png" className="absolute -right-10 -bottom-1 text-white/5 w-40 h-40" />
+                <img src="/image/puhua_logo.png" className="absolute -right-10 -bottom-1 text-white/5 w-28 h-28 sm:w-40 sm:h-40" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm transition-transform active:scale-95">
                   <ClipboardList size={24} className="text-blue-600 mb-4" />
-                  <p className="text-3xl font-black text-slate-800 leading-none">{filteredQueues.length}</p>
+                  <p className="text-xl sm:text-2xl font-black text-slate-800 leading-none">{filteredQueues.length}</p>
                   <p className="text-[10px] font-black text-slate-300 uppercase mt-2 tracking-widest">Total Aduan</p>
                 </div>
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm transition-transform active:scale-95">
                   <CheckCircle2 size={24} className="text-emerald-500 mb-4" />
-                  <p className="text-3xl font-black text-slate-800 leading-none">{filteredQueues.filter(q => q.status === 'Selesai').length}</p>
+                  <p className="text-xl sm:text-2xl font-black text-slate-800 leading-none">{filteredQueues.filter(q => q.status === 'Selesai').length}</p>
                   <p className="text-[10px] font-black text-slate-300 uppercase mt-2 tracking-widest">Selesai</p>
                 </div>
               </div>
@@ -590,7 +601,7 @@ export default function App() {
               <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-slate-400 font-black text-xs uppercase tracking-widest mb-6 active:scale-95 transition-transform">
                 <ArrowLeft size={16} /> Batal
               </button>
-              <h2 className="text-3xl font-black text-slate-900 tracking-tighter mb-8">Buat Aduan</h2>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter mb-8">Buat Aduan</h2>
               <form onSubmit={handleCreate} className="space-y-5">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Judul Aduan</label>
@@ -638,7 +649,7 @@ export default function App() {
           ) : view === 'queue_list' ? (
             <div className="animate-in fade-in duration-500 space-y-6">
               <div className="flex justify-between items-end">
-                <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Daftar Aduan</h2>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter">Daftar Aduan</h2>
               </div>
               <div className="space-y-4">
                 {filteredQueues.length === 0 ? (
@@ -661,7 +672,7 @@ export default function App() {
           ) : view === 'task_list' ? (
             <div className="animate-in fade-in duration-500 space-y-6">
               <div className="flex justify-between items-end">
-                <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter">
                   Tugas Saya
                 </h2>
               </div>
@@ -701,7 +712,7 @@ export default function App() {
 
           ) : view === 'admin_settings' ? (
             <div className="animate-in fade-in duration-500 space-y-8">
-              <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Manajemen Sistem</h2>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter">Manajemen Sistem</h2>
 
               <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
                 <div className="p-6 bg-blue-700 flex items-center gap-3 text-white">
@@ -727,7 +738,7 @@ export default function App() {
                       placeholder="Nama Lengkap" required
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Password</label>
                       <input
@@ -749,7 +760,7 @@ export default function App() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Level Akses</label>
                       <div className="relative">
