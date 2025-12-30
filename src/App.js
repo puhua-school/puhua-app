@@ -93,7 +93,20 @@ const LoginPage = ({ onLogin, users }) => {
     <div className="flex flex-col h-full bg-slate-50 px-8 justify-center animate-in fade-in duration-700">
       <div className="mb-10 text-center">
         <div className="mx-auto flex items-center justify-center mb-6">
-          <img src="/image/puhua_logo.png" alt="Logo" className="w-20 h-20 object-contain" />
+          <img
+            src="/image/puhua_logo.png"
+            alt="Logo"
+            className="
+    h-20
+    sm:h-24
+    md:h-28
+    lg:h-32
+    w-auto
+    mx-auto
+  "
+          />
+
+
         </div>
         <h1 className="text-3xl font-black text-gray-900 tracking-tighter">Puhua Maintenance</h1>
         <p className="text-gray-400 mt-2 text-sm font-medium">Silakan masuk untuk melapor</p>
