@@ -193,29 +193,7 @@ export default function App() {
       setNotificationPermission(Notification.permission);
     }
 
-    // 3. Inject Tailwind & Global Styles
-    if (!document.getElementById('tailwind-cdn')) {
-      const script = document.createElement('script');
-      script.id = 'tailwind-cdn';
-      script.src = "https://cdn.tailwindcss.com";
-      document.head.appendChild(script);
 
-      const style = document.createElement('style');
-      style.innerHTML = `
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes slideInFromLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
-        @keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        @keyframes slideInFromBottom { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .animate-in { animation-duration: 0.3s; animation-fill-mode: both; }
-        .slide-in-from-left { animation-name: slideInFromLeft; }
-        .slide-in-from-right { animation-name: slideInFromRight; }
-        .slide-in-from-bottom-4 { animation-name: slideInFromBottom; }
-        .fade-in { animation-name: fadeIn; animation-duration: 0.5s; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      `;
-      document.head.appendChild(style);
-    }
   }, []);
 
   // Request Notification Permission
