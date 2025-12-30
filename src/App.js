@@ -90,8 +90,12 @@ const LoginPage = ({ onLogin, users }) => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50px-4 py-8sm:px-8 sm:py-0
-                    justify-center animate-in fade-in duration-700">
+    <div className="flex flex-col min-h-screen
+  bg-slate-50
+  px-4 py-8
+  sm:px-8 sm:py-0
+  justify-center
+  animate-in fade-in duration-700">
       <div className="mb-10 text-center">
         <div className="mx-auto flex items-center justify-center mb-6">
           <img
