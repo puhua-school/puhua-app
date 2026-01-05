@@ -224,6 +224,18 @@ export default function App() {
     fetchJobs();
   }, []);
 
+  useEffect(() => {
+    const fetchQueues = async () => {
+      const { data, error } = await supabase
+        .from('complaints')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error) setQueues(data);
+    };
+    fetchQueues();
+  }, []);
+
   // Request Notification Permission
   const requestNotify = () => {
     if ("Notification" in window) {
@@ -321,17 +333,41 @@ export default function App() {
     setNewUserForm(emptyUserForm);
   };
 
-  const handleUpdateStatus = (id, newStatus) => {
+  const handleUpdateStatus = async (id, newStatus) => {
+    // Update state lokal
     setQueues(prev => prev.map(q => q.id === id ? { ...q, status: newStatus } : q));
+
+    // Update di Supabase
+    const { error } = await supabase
+      .from('complaints')
+      .update({ status: newStatus })
+      .eq('id', id);
+
+    if (error) {
+      alert("Gagal update status: " + error.message);
+    }
+
     setSelected(null);
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm("Batalkan aduan ini?")) {
-      setQueues(prev => prev.filter(q => q.id !== id));
-      setSelected(null);
-    }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Batalkan aduan ini?")) return;
+
+    // Hapus state lokal
+    setQueues(prev => prev.filter(q => q.id !== id));
+
+    // Hapus di Supabase
+    const { error } = await supabase
+      .from('complaints')
+      .delete()
+      .eq('id', id);
+
+    if (error) alert("Gagal hapus aduan: " + error.message);
+
+    setSelected(null);
   };
+
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -349,30 +385,68 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  const handleCreate = (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
 
-    const newEntry = {
-      id: `REQ-${Math.floor(100 + Math.random() * 900)}`,
-      title: e.target.title.value,
-      location: e.target.location.value,
-      description: e.target.description.value,
-      image: previewImage, // ⬅️ SIMPAN FOTO
-      status: 'Menunggu',
-      requester: currentUser.pemilik_name,
-      date: 'Baru Saja'
-    };
+    if (!currentUser) return alert("User belum login.");
 
-    setQueues([newEntry, ...queues]);
-    setPreviewImage(null); // reset preview
+    let imageUrl = null;
 
-    triggerNotification(
-      "Aduan Baru Masuk!",
-      `${newEntry.requester} melaporkan: ${newEntry.title} di ${newEntry.location}`
-    );
+    try {
+      // 1️⃣ Upload image ke bucket jika ada
+      if (previewImage) {
+        // previewImage berupa base64, kita perlu convert ke Blob
+        const response = await fetch(previewImage);
+        const blob = await response.blob();
+        const fileName = `images/${Date.now()}_${blob.name || 'upload.png'}`;
 
-    setView('queue_list');
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('complaints') // nama bucket
+          .upload(fileName, blob, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) throw uploadError;
+
+        // 2️⃣ Ambil public URL
+        imageUrl = supabase.storage
+          .from('complaints')
+          .getPublicUrl(uploadData.path).data.publicUrl;
+      }
+
+      // 3️⃣ Insert row ke tabel complaints
+      const { data: complaintData, error: insertError } = await supabase
+        .from('complaints')
+        .insert([{
+          id: `REQ-${Math.floor(100 + Math.random() * 900)}`,
+          title: e.target.title.value,
+          location: e.target.location.value,
+          description: e.target.description.value,
+          image: imageUrl,           // URL dari bucket
+          status: 'Menunggu',
+          requester: currentUser.id, // pakai user id
+          date: new Date().toISOString()
+        }]);
+
+      if (insertError) throw insertError;
+
+      // 4️⃣ Update UI lokal
+      setQueues([complaintData[0], ...queues]);
+      setPreviewImage(null);
+      setView('queue_list');
+
+      // 5️⃣ Notifikasi
+      triggerNotification(
+        "Aduan Baru Masuk!",
+        `${currentUser.pemilik_name} melaporkan: ${e.target.title.value} di ${e.target.location.value}`
+      );
+
+    } catch (err) {
+      console.error("Gagal menyimpan aduan:", err.message);
+      alert("Gagal menyimpan aduan: " + err.message);
+    }
   };
+
+
+
   /*const handleAddUser = (e) => {
     e.preventDefault();
     const alphaRegex = /^[A-Za-z]+$/;
