@@ -439,7 +439,7 @@ export default function App() {
 
   if (!currentUser) return (
     <div className="min-h-screen bg-slate-200 flex items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md bg-white h-[844px] shadow-2xl sm:rounded-[3rem] border-0 sm:border-[12px] border-slate-900">
+      <div className="w-full max-w-md bg-white h-[844px] shadow-2xl sm:rounded-[3rem] border-0 sm:border-[12px] border-slate-900 overflow-auto">
         <LoginPage onLogin={handleLogin} />
       </div>
     </div>
