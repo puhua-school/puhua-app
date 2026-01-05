@@ -1,6 +1,8 @@
-import { supabase } from './supabase';
+//KONEKSI SUPABASE ONLINE, HARUS PALING ATAS
+import { supabase } from '../src/supabase';
 
 import React, { useState, useEffect } from 'react';
+
 import {
   Menu, X, User, LogOut, Settings,
   List, PlusCircle, CheckSquare,
@@ -9,6 +11,7 @@ import {
   Clock, Tag, Trash2, ArrowLeft, CheckCircle2,
   Lock, Eye, EyeOff, ClipboardList, UserPlus, Bell
 } from 'lucide-react';
+
 
 /**
  * DATA MASTER & KONFIGURASI
@@ -20,11 +23,11 @@ const masterJobs = {
   'JOB004': 'Sarpras'
 };
 
-const initialUsers = [
+/*const initialUsers = [
   { user_id: 1, username: 'admin', password: '123', pemilik_name: 'Super Admin', level_id: 1, job_id: 'JOB003' },
   { user_id: 2, username: 'sarpras', password: '123', pemilik_name: 'Mr. Nanang', level_id: 2, job_id: 'JOB004' },
   { user_id: 3, username: 'ronny', password: '123', pemilik_name: 'Ronny Laoshi', level_id: 3, job_id: 'JOB001' },
-];
+];*/
 
 const initialQueues = []; //Menampung array aduan
 
@@ -81,42 +84,19 @@ const LoginPage = ({ onLogin, users }) => {
 
   /*const handleSubmit = (e) => {
     e.preventDefault();
-    const foundUser = users.find(
-      u => u.username === username && u.password === password
-    );
+    const foundUser = users.find(u => u.username === username && u.password === password);
 
     if (foundUser) {
       onLogin(foundUser, rememberMe);
     } else {
       setError('Username atau password salah');
+      setTimeout(() => setError(''), 3000);
     }
-  };*/
+  };*/ //TIDAK DIPAKAI LAGI KARENA SUDAH ONLINE
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-      id,
-      username,
-      password,
-      pemilik_name,
-      level_id,
-      job_id
-    `)
-      .eq('username', username.trim())
-      .eq('password', password.trim())
-      .maybeSingle();
-
-    if (error || !data) {
-      setError('Username atau password salah');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
-    onLogin(data, rememberMe);
+    await onLogin(username, password, rememberMe);
   };
 
 
@@ -200,15 +180,105 @@ const LoginPage = ({ onLogin, users }) => {
  */
 export default function App() {
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('dashboard');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [view, setView] = useState('login');
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [queues, setQueues] = useState(initialQueues);
-  const [users, setUsers] = useState(initialUsers);
+
   const [selected, setSelected] = useState(null);
   const [menuConfig, setMenuConfig] = useState(initialMenuConfig);
   const [notificationPermission, setNotificationPermission] = useState('default');
   const [previewImage, setPreviewImage] = useState(null);
   const hasImage = Boolean(selected?.image);
+
+  const isAdmin = user?.job_id === 'JOB001';
+  const isSarpras = user?.job_id === 'JOB004';
+  const isPetugas = isAdmin || isSarpras;
+
+  {
+    queues.map((q) => (
+      <div key={q.id} className="queue-card">
+        <h4>{q.title}</h4>
+        <p>Status: {q.status}</p>
+
+        <p>
+          Pelapor: {q.users?.pemilik_name} (
+          {q.users?.jobs?.name})
+        </p>
+
+        {isPetugas && (
+          <select
+            value={q.status}
+            onChange={(e) =>
+              updateStatus(q.id, e.target.value)
+            }
+          >
+            <option>Menunggu</option>
+            <option>Diproses</option>
+            <option>Selesai</option>
+          </select>
+        )}
+      </div>
+    ))
+  }
+
+  const updateStatus = async (id, status) => {
+    const { error } = await supabase
+      .from('complaints')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    loadComplaints();
+  };
+
+  const loadComplaints = async () => {
+    let query = supabase
+      .from('complaints')
+      .select(`
+      id,
+      title,
+      status,
+      created_at,
+      users (
+        pemilik_name,
+        jobs ( name )
+      )
+    `)
+      .order('created_at', { ascending: false });
+
+    if (!isPetugas) {
+      query = query.eq('user_id', user.id);
+    }
+
+    const { data } = await query;
+    setQueues(data || []);
+  };
+
+  useEffect(() => {
+    const testSupabase = async () => {
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+    id,
+    username,
+    pemilik_name,
+    job_id,
+    jobs:job_id ( name )
+  `)
+        .eq('username', username)
+        .eq('password', password)
+        .maybeSingle();
+    };
+
+    testSupabase();
+  }, []);
 
   // Load Session & Notifikasi
   useEffect(() => {
@@ -227,9 +297,46 @@ export default function App() {
     if ("Notification" in window) {
       setNotificationPermission(Notification.permission);
     }
-
-
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      console.log('USER LOGIN:', user);
+    }
+  }, [user]);
+
+  // AMBIL DATA USER DARI DB SUPABASE
+  const loginWithSupabase = async () => {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+      id,
+      username,
+      pemilik_name,
+      job_id,
+      jobs:job_id ( name )
+    `)
+      .eq('username', username.trim())
+      .eq('password', password.trim())
+      .maybeSingle();
+
+    console.log('LOGIN RESULT:', data, error);
+
+    if (!data || error) {
+      alert('Username atau password salah');
+      return;
+    }
+
+    setUser({
+      ...data,
+      job_name: data.jobs?.name
+    });
+
+    setView('dashboard');
+  };
+
+
+
 
   // Request Notification Permission
   const requestNotify = () => {
@@ -261,16 +368,38 @@ export default function App() {
 
   const [newUserForm, setNewUserForm] = useState(emptyUserForm);
 
-  const handleLogin = (userData, remember) => {
-    setSelected(null);
-    setView('dashboard');
-    setUser(userData);
+  const handleLogin = async () => {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+      id,
+      username,
+      pemilik_name,
+      level_id,
+      job_id
+    `)
+      .eq('username', username.trim())
+      .eq('password', password.trim())
+      .maybeSingle();
 
-    if (remember) {
-      const expiry = new Date().getTime() + (10 * 24 * 60 * 60 * 1000); // 10 Hari
-      localStorage.setItem('puhua_session', JSON.stringify({ user: userData, expiry }));
+    if (!data || error) {
+      alert('Username atau password salah');
+      return;
     }
+
+    // SIMPAN KE COOKIE (10 HARI)
+    const expiredDays = 10;
+    const expiredDate = new Date();
+    expiredDate.setDate(expiredDate.getDate() + expiredDays);
+
+    document.cookie = `login_user=${encodeURIComponent(
+      JSON.stringify(data)
+    )}; expires=${expiredDate.toUTCString()}; path=/`;
+
+    setUser(data);
+    setView('dashboard');
   };
+
 
   const handleLogout = () => {
     localStorage.removeItem('puhua_session');
@@ -367,16 +496,27 @@ export default function App() {
     if (!alphanumericNoSymbolRegex.test(newUserForm.password)) return alert("Password hanya boleh huruf dan angka.");
     if (newUserForm.password !== newUserForm.confirmPassword) return alert("Konfirmasi password tidak cocok.");
 
-    const newUser = {
-      user_id: users.length + 1,
-      username: newUserForm.username,
-      password: newUserForm.password,
-      pemilik_name: newUserForm.pemilik_name,
-      level_id: parseInt(newUserForm.level_id),
-      job_id: newUserForm.job_id
+    const registerUser = async () => {
+      const { error } = await supabase
+        .from('users')
+        .insert({
+          username: newUserForm.username,
+          password: newUserForm.password,
+          pemilik_name: newUserForm.pemilik_name,
+          level_id: Number(newUserForm.level_id),
+          job_id: newUserForm.job_id
+        });
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      alert('User berhasil ditambahkan');
     };
 
-    setUsers([...users, newUser]);
+
+    //setUsers([...users, newUser]);
     alert("User berhasil ditambahkan!");
     setNewUserForm(emptyUserForm);
   };
@@ -417,14 +557,12 @@ export default function App() {
     return false;
   });
 
-
-
   const CurrentViewIcon = selected ? List : (menuConfig[view]?.icon || Shield);
 
   if (!user) return (
     <div className="min-h-screen bg-slate-200 flex items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-md bg-white h-[844px] shadow-2xl overflow-hidden sm:rounded-[3rem] border-0 sm:border-[12px] border-slate-900">
-        <LoginPage onLogin={handleLogin} users={users} />
+        <LoginPage onLogin={loginWithSupabase} />
       </div>
     </div>
   );
