@@ -1,6 +1,5 @@
-import { supabase } from './supabase';
-
 import React, { useState, useEffect } from 'react';
+import { supabase } from './supabase';
 import {
   Menu, X, User, LogOut, Settings,
   List, PlusCircle, CheckSquare,
@@ -13,7 +12,7 @@ import {
 /**
  * DATA MASTER & KONFIGURASI
  */
-const masterJobs = {
+/*const masterJobs = {
   'JOB001': 'Laoshi',
   'JOB002': 'Staf Non-Akademik',
   'JOB003': 'Staf IT',
@@ -24,7 +23,7 @@ const initialUsers = [
   { user_id: 1, username: 'admin', password: '123', pemilik_name: 'Super Admin', level_id: 1, job_id: 'JOB003' },
   { user_id: 2, username: 'sarpras', password: '123', pemilik_name: 'Mr. Nanang', level_id: 2, job_id: 'JOB004' },
   { user_id: 3, username: 'ronny', password: '123', pemilik_name: 'Ronny Laoshi', level_id: 3, job_id: 'JOB001' },
-];
+];*/
 
 const initialQueues = []; //Menampung array aduan
 
@@ -73,51 +72,12 @@ const Badge = ({ status }) => {
 /**
  * HALAMAN LOGIN
  */
-const LoginPage = ({ onLogin, users }) => {
+const LoginPage = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
 
-  /*const handleSubmit = (e) => {
-    e.preventDefault();
-    const foundUser = users.find(
-      u => u.username === username && u.password === password
-    );
-
-    if (foundUser) {
-      onLogin(foundUser, rememberMe);
-    } else {
-      setError('Username atau password salah');
-    }
-  };*/
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-      id,
-      username,
-      password,
-      pemilik_name,
-      level_id,
-      job_id
-    `)
-      .eq('username', username.trim())
-      .eq('password', password.trim())
-      .maybeSingle();
-
-    if (error || !data) {
-      setError('Username atau password salah');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
-    onLogin(data, rememberMe);
-  };
 
 
   return (
@@ -147,7 +107,11 @@ const LoginPage = ({ onLogin, users }) => {
         <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tighter">Puhua Maintenance</h1>
         <p className="text-gray-400 mt-2 text-sm font-medium">Silakan masuk untuk melapor</p>
       </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onLogin(username, password, rememberMe);
+        }} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center gap-2">
             <AlertCircle size={14} /> {error}
@@ -203,12 +167,19 @@ export default function App() {
   const [view, setView] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
   const [queues, setQueues] = useState(initialQueues);
-  const [users, setUsers] = useState(initialUsers);
+  //const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
   const [selected, setSelected] = useState(null);
   const [menuConfig, setMenuConfig] = useState(initialMenuConfig);
   const [notificationPermission, setNotificationPermission] = useState('default');
   const [previewImage, setPreviewImage] = useState(null);
   const hasImage = Boolean(selected?.image);
+
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [jobs, setJobs] = useState([]);
 
   // Load Session & Notifikasi
   useEffect(() => {
@@ -231,6 +202,19 @@ export default function App() {
 
   }, []);
 
+  useEffect(() => {
+    const fetchJobs = async () => {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('id, name')
+        .order('name');
+
+      if (!error) setJobs(data);
+    };
+
+    fetchJobs();
+  }, []);
+
   // Request Notification Permission
   const requestNotify = () => {
     if ("Notification" in window) {
@@ -238,6 +222,11 @@ export default function App() {
         setNotificationPermission(permission);
       });
     }
+  };
+
+  const handleAddUser = (e) => {
+    e.preventDefault();
+    alert('Fitur tambah user akan menggunakan Supabase');
   };
 
   // Push Notification Logic
@@ -261,7 +250,7 @@ export default function App() {
 
   const [newUserForm, setNewUserForm] = useState(emptyUserForm);
 
-  const handleLogin = (userData, remember) => {
+  /*const handleLogin = (userData, remember) => {
     setSelected(null);
     setView('dashboard');
     setUser(userData);
@@ -270,11 +259,53 @@ export default function App() {
       const expiry = new Date().getTime() + (10 * 24 * 60 * 60 * 1000); // 10 Hari
       localStorage.setItem('puhua_session', JSON.stringify({ user: userData, expiry }));
     }
+  };*/
+
+  // ===============================
+  // HANDLE LOGIN (SUPABASE)
+  // ===============================
+  const handleLogin = async (username, password, remember = false) => {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+      id,
+      username,
+      pemilik_name,
+      level_id,
+      job_id,
+      jobs (
+        name
+      )
+    `)
+      .eq('username', username)
+      .eq('password', password)
+      .maybeSingle();
+
+    if (error || !data) {
+      alert('Username atau password salah');
+      return;
+    }
+
+    const userData = {
+      ...data,
+      job_name: data.jobs?.name || ''
+    };
+
+    setCurrentUser(userData);
+
+    if (remember) {
+      const expiry = new Date().getTime() + (10 * 24 * 60 * 60 * 1000);
+      localStorage.setItem(
+        'puhua_session',
+        JSON.stringify({ user: userData, expiry })
+      );
+    }
   };
+
 
   const handleLogout = () => {
     localStorage.removeItem('puhua_session');
-    setUser(null);
+    setCurrentUser(null);
     setView('dashboard');
     setSelected(null);
     setMenuOpen(false);
@@ -292,30 +323,6 @@ export default function App() {
       setSelected(null);
     }
   };
-
-  /*const handleCreate = (e) => {
-    e.preventDefault();
-    const newEntry = {
-      id: `REQ-${Math.floor(100 + Math.random() * 900)}`,
-      title: e.target.title.value,
-      location: e.target.location.value,
-      description: e.target.description.value,
-      status: 'Menunggu',
-      requester: user.pemilik_name,
-      date: 'Baru Saja'
-    };
-
-    setQueues([newEntry, ...queues]);
-
-    // Trigger Notifikasi jika user saat ini adalah Pelapor Umum (Level 3)
-    // Ditujukan untuk Admin (1) & Petugas (2)
-    triggerNotification(
-      "Aduan Baru Masuk!",
-      `${newEntry.requester} melaporkan: ${newEntry.title} di ${newEntry.location}`
-    );
-
-    setView('queue_list');
-  };*/
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -343,7 +350,7 @@ export default function App() {
       description: e.target.description.value,
       image: previewImage, // ⬅️ SIMPAN FOTO
       status: 'Menunggu',
-      requester: user.pemilik_name,
+      requester: currentUser.pemilik_name,
       date: 'Baru Saja'
     };
 
@@ -357,7 +364,7 @@ export default function App() {
 
     setView('queue_list');
   };
-  const handleAddUser = (e) => {
+  /*const handleAddUser = (e) => {
     e.preventDefault();
     const alphaRegex = /^[A-Za-z]+$/;
     const alphanumericNoSymbolRegex = /^[A-Za-z0-9]+$/;
@@ -379,29 +386,29 @@ export default function App() {
     setUsers([...users, newUser]);
     alert("User berhasil ditambahkan!");
     setNewUserForm(emptyUserForm);
-  };
+  };*/
 
   const filteredQueues = queues.filter(q => {
-    if (user && user.level_id === 3) return q.requester === user.pemilik_name;
+    if (user && currentUser.level_id === 3) return q.requester === currentUser.pemilik_name;
     return true;
   });
 
   const taskQueues = filteredQueues.filter(q => {
     // user belum siap
-    if (!user) return false;
+    if (!currentUser) return false;
 
     // =========================
     // ADMIN (level_id === 1)
     // =========================
-    if (user.level_id === 1) {
+    if (currentUser.level_id === 1) {
       // Admin hanya melihat aduan BUATANNYA SENDIRI
-      return q.requester === user.pemilik_name;
+      return q.requester === currentUser.pemilik_name;
     }
 
     // =========================
     // SARPRAS (level_id === 2)
     // =========================
-    if (user.level_id === 2) {
+    if (currentUser.level_id === 2) {
       // Sarpras tidak melihat aduan selesai
       return q.status !== 'Selesai';
     }
@@ -409,9 +416,9 @@ export default function App() {
     // =========================
     // UMUM (level_id === 3)
     // =========================
-    if (user.level_id === 3) {
+    if (currentUser.level_id === 3) {
       // User umum hanya melihat aduannya sendiri
-      return q.requester === user.pemilik_name;
+      return q.requester === currentUser.pemilik_name;
     }
 
     return false;
@@ -421,10 +428,10 @@ export default function App() {
 
   const CurrentViewIcon = selected ? List : (menuConfig[view]?.icon || Shield);
 
-  if (!user) return (
+  if (!currentUser) return (
     <div className="min-h-screen bg-slate-200 flex items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-md bg-white h-[844px] shadow-2xl overflow-hidden sm:rounded-[3rem] border-0 sm:border-[12px] border-slate-900">
-        <LoginPage onLogin={handleLogin} users={users} />
+        <LoginPage onLogin={handleLogin} />
       </div>
     </div>
   );
@@ -469,13 +476,13 @@ export default function App() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-0.5">User Aktif</p>
-                  <h2 className="text-lg font-black truncate leading-tight mb-1">{user.pemilik_name}</h2>
+                  <h2 className="text-lg font-black truncate leading-tight mb-1">{currentUser.pemilik_name}</h2>
                   <div className="flex flex-wrap gap-1.5 items-center">
                     <span className="px-1.5 py-0.5 bg-white/10 rounded text-[9px] font-black uppercase tracking-tighter border border-white/10">
-                      {user.level_id === 1 ? 'Admin' : user.level_id === 2 ? 'Petugas' : 'Umum'}
+                      {currentUser.level_id === 1 ? 'Admin' : currentUser.level_id === 2 ? 'Petugas' : 'Umum'}
                     </span>
                     <span className="text-[10px] text-blue-100 font-bold opacity-80 truncate max-w-[100px]">
-                      • {masterJobs[user.job_id]}
+                      • {currentUser.jobs?.name}
                     </span>
                   </div>
                 </div>
@@ -483,7 +490,7 @@ export default function App() {
 
               <div className="flex-1 py-6 px-4 space-y-1 overflow-y-auto no-scrollbar">
                 {Object.entries(menuConfig).map(([key, cfg]) => (
-                  cfg.levels.includes(user.level_id) && (
+                  cfg.levels.includes(currentUser.level_id) && (
                     <button
                       key={key}
                       onClick={() => { setView(key); setMenuOpen(false); setSelected(null); }}
@@ -496,7 +503,7 @@ export default function App() {
                 ))}
 
                 {/* Notification Permission Toggle */}
-                {(user.level_id === 1 || user.level_id === 2) && (
+                {(currentUser.level_id === 1 || currentUser.level_id === 2) && (
                   <button
                     onClick={requestNotify}
                     className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-amber-600 hover:bg-amber-50 font-bold text-sm transition-all"
@@ -569,12 +576,12 @@ export default function App() {
                 </div>
 
                 <div className="pt-4 space-y-3">
-                  {user.level_id !== 3 && selected.status === 'Menunggu' && <Button onClick={() => handleUpdateStatus(selected.id, 'Sedang Dikerjakan')}>Terima & Kerjakan</Button>}
-                  {user.level_id !== 3 && selected.status === 'Sedang Dikerjakan' && <Button variant="warning" onClick={() => handleUpdateStatus(selected.id, 'Menunggu Verifikasi')}>Selesaikan Tugas</Button>}
-                  {selected.status === 'Menunggu Verifikasi' && (user.level_id === 1 || user.pemilik_name === selected.requester) && (
+                  {currentUser.level_id !== 3 && selected.status === 'Menunggu' && <Button onClick={() => handleUpdateStatus(selected.id, 'Sedang Dikerjakan')}>Terima & Kerjakan</Button>}
+                  {currentUser.level_id !== 3 && selected.status === 'Sedang Dikerjakan' && <Button variant="warning" onClick={() => handleUpdateStatus(selected.id, 'Menunggu Verifikasi')}>Selesaikan Tugas</Button>}
+                  {selected.status === 'Menunggu Verifikasi' && (currentUser.level_id === 1 || currentUser.pemilik_name === selected.requester) && (
                     <Button variant="success" onClick={() => handleUpdateStatus(selected.id, 'Selesai')}>Konfirmasi Selesai</Button>
                   )}
-                  {selected.status === 'Menunggu' && (user.level_id === 1 || user.pemilik_name === selected.requester) && (
+                  {selected.status === 'Menunggu' && (currentUser.level_id === 1 || currentUser.pemilik_name === selected.requester) && (
                     <Button variant="danger" onClick={() => handleDelete(selected.id)}><Trash2 size={18} /> Batalkan Aduan</Button>
                   )}
                 </div>
@@ -584,7 +591,7 @@ export default function App() {
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
               <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
                 <div className="relative z-10">
-                  <h2 className="text-2xl font-black mb-1 leading-tight">Halo, {user.pemilik_name}</h2>
+                  <h2 className="text-2xl font-black mb-1 leading-tight">Halo, {currentUser.pemilik_name}</h2>
                   <p className="text-slate-400 text-sm font-medium">Sistem siap menerima laporan Anda.</p>
                 </div>
                 <img src="/image/puhua_logo.png" className="absolute -right-10 -bottom-1 text-white/5 w-28 h-28 sm:w-40 sm:h-40" />
@@ -603,7 +610,7 @@ export default function App() {
                 </div>
               </div>
 
-              {menuConfig.create_complaint.levels.includes(user.level_id) && (
+              {menuConfig.create_complaint.levels.includes(currentUser.level_id) && (
                 <Button onClick={() => setView('create_complaint')} className="py-5 text-base rounded-[2rem] shadow-xl active:scale-[0.98]">
                   <PlusCircle size={22} /> BUAT LAPORAN BARU
                 </Button>
@@ -795,9 +802,12 @@ export default function App() {
                         onChange={(e) => setNewUserForm({ ...newUserForm, job_id: e.target.value })}
                         className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold appearance-none transition-all cursor-pointer"
                       >
-                        {Object.entries(masterJobs).map(([id, label]) => (
-                          <option key={id} value={id}>{label}</option>
+                        {jobs.map(job => (
+                          <option key={job.id} value={job.id}>
+                            {job.name}
+                          </option>
                         ))}
+
                       </select>
                     </div>
                   </div>
