@@ -213,15 +213,31 @@ export default function App() {
   // Load Session & Notifikasi
   useEffect(() => {
     // 1. Cek Login Session
-    const savedSession = localStorage.getItem('puhua_session');
-    if (savedSession) {
-      const { user: userData, expiry } = JSON.parse(savedSession);
-      if (new Date().getTime() < expiry) {
-        setUser(userData);
-      } else {
-        localStorage.removeItem('puhua_session');
+    useEffect(() => {
+      const savedSession = localStorage.getItem('puhua_session')
+      if (!savedSession) return
+
+      const { user: userData, expiry, lastActivity } = JSON.parse(savedSession)
+      const now = Date.now()
+
+      // ❌ session habis total
+      if (now > expiry) {
+        localStorage.removeItem('puhua_session')
+        setCurrentUser(null)
+        return
       }
-    }
+
+      // ❌ idle > 2 jam
+      if (now - lastActivity > 2 * 60 * 60 * 1000) {
+        localStorage.removeItem('puhua_session')
+        setCurrentUser(null)
+        return
+      }
+
+      // ✅ session masih valid
+      setCurrentUser(userData)
+    }, [])
+
 
     // 2. Minta Izin Notifikasi
     if ("Notification" in window) {
@@ -243,6 +259,56 @@ export default function App() {
 
     fetchJobs();
   }, []);
+
+  useEffect(() => {
+    const updateActivity = () => {
+      const savedSession = localStorage.getItem('puhua_session')
+      if (!savedSession) return
+
+      const session = JSON.parse(savedSession)
+
+      localStorage.setItem(
+        'puhua_session',
+        JSON.stringify({
+          ...session,
+          lastActivity: Date.now()
+        })
+      )
+    }
+
+    // aktivitas yang dianggap "hidup"
+    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart']
+
+    events.forEach(event =>
+      window.addEventListener(event, updateActivity)
+    )
+
+    return () => {
+      events.forEach(event =>
+        window.removeEventListener(event, updateActivity)
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const savedSession = localStorage.getItem('puhua_session')
+      if (!savedSession) return
+
+      const { expiry, lastActivity } = JSON.parse(savedSession)
+      const now = Date.now()
+
+      if (
+        now > expiry ||
+        now - lastActivity > 2 * 60 * 60 * 1000
+      ) {
+        localStorage.removeItem('puhua_session')
+        setCurrentUser(null)
+      }
+    }, 60 * 1000) // cek tiap 1 menit
+
+    return () => clearInterval(interval)
+  }, [])
 
   const fetchQueues = async () => {
     setIsLoading(true)
@@ -366,10 +432,18 @@ export default function App() {
 
     if (remember) {
       const expiry = new Date().getTime() + (10 * 24 * 60 * 60 * 1000);
+      const now = Date.now()
+      const expiry = now + (2 * 60 * 60 * 1000) // 2 JAM
+
       localStorage.setItem(
         'puhua_session',
-        JSON.stringify({ user: userData, expiry })
-      );
+        JSON.stringify({
+          user: userData,
+          expiry,
+          lastActivity: now
+        })
+      )
+
     }
   };
 
