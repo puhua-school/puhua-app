@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
+import imageCompression from 'browser-image-compression'
 import {
   Menu, X, User, LogOut, Settings,
   List, PlusCircle, CheckSquare,
@@ -8,22 +9,6 @@ import {
   Clock, Tag, Trash2, ArrowLeft, CheckCircle2,
   Lock, Eye, EyeOff, ClipboardList, UserPlus, Bell
 } from 'lucide-react';
-
-/**
- * DATA MASTER & KONFIGURASI
- */
-/*const masterJobs = {
-  'JOB001': 'Laoshi',
-  'JOB002': 'Staf Non-Akademik',
-  'JOB003': 'Staf IT',
-  'JOB004': 'Sarpras'
-};
-
-const initialUsers = [
-  { user_id: 1, username: 'admin', password: '123', pemilik_name: 'Super Admin', level_id: 1, job_id: 'JOB003' },
-  { user_id: 2, username: 'sarpras', password: '123', pemilik_name: 'Mr. Nanang', level_id: 2, job_id: 'JOB004' },
-  { user_id: 3, username: 'ronny', password: '123', pemilik_name: 'Ronny Laoshi', level_id: 3, job_id: 'JOB001' },
-];*/
 
 const initialQueues = []; //Menampung array aduan
 
@@ -168,6 +153,38 @@ const LoginPage = ({ onLogin }) => {
   );
 };
 
+export async function compressImageIfNeeded(file) {
+  // validasi file
+  if (!file || !file.type.startsWith('image/')) {
+    throw new Error('File bukan image')
+  }
+
+  // jika <= 1 MB, langsung pakai file asli
+  if (file.size <= 1024 * 1024) {
+    return file
+  }
+
+  const options = {
+    maxSizeMB: 1,              // target max 1 MB
+    maxWidthOrHeight: 1280,    // resize aman (foto HP)
+    useWebWorker: true,
+    initialQuality: 0.8
+  }
+
+  try {
+    const compressedFile = await imageCompression(file, options)
+
+    console.log(
+      `Image compressed: ${(file.size / 1024 / 1024).toFixed(2)} MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)} MB`
+    )
+
+    return compressedFile
+  } catch (error) {
+    console.error('Compression failed, using original file', error)
+    return file // fallback aman
+  }
+}
+
 /**
  * HALAMAN UTAMA
  */
@@ -182,13 +199,14 @@ export default function App() {
   const [menuConfig, setMenuConfig] = useState(initialMenuConfig);
   const [notificationPermission, setNotificationPermission] = useState('default');
   const [previewImage, setPreviewImage] = useState(null);
-  const hasImage = Boolean(selected?.image);
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [jobs, setJobs] = useState([]);
+  const [imageFile, setImageFile] = useState(null)
+
 
   // Load Session & Notifikasi
   useEffect(() => {
@@ -349,7 +367,6 @@ export default function App() {
     }
   };
 
-
   const handleLogout = () => {
     localStorage.removeItem('puhua_session');
     setCurrentUser(null);
@@ -376,40 +393,63 @@ export default function App() {
     setSelected(null);
   };
 
-
   const handleDelete = async (id) => {
-    if (!window.confirm("Batalkan aduan ini?")) return;
+    if (!window.confirm("Batalkan aduan ini?")) return
 
-    // Hapus state lokal
-    setQueues(prev => prev.filter(q => q.id !== id));
+    try {
+      // 1️⃣ Ambil image_path
+      const { data: complaint, error: fetchError } = await supabase
+        .from('complaints')
+        .select('image_path')
+        .eq('id', id)
+        .single()
 
-    // Hapus di Supabase
-    const { error } = await supabase
-      .from('complaints')
-      .delete()
-      .eq('id', id);
+      if (fetchError) throw fetchError
 
-    if (error) alert("Gagal hapus aduan: " + error.message);
+      // 2️⃣ Hapus file storage (AMAN)
+      if (complaint?.image_path) {
+        const { error: storageError } = await supabase.storage
+          .from('complaints')
+          .remove([complaint.image_path])
 
-    setSelected(null);
-  };
+        if (storageError) {
+          console.warn('Storage delete failed:', storageError.message)
+        }
+      }
+
+      // 3️⃣ Hapus row database
+      const { error: deleteError } = await supabase
+        .from('complaints')
+        .delete()
+        .eq('id', id)
+
+      if (deleteError) throw deleteError
+
+      // 4️⃣ Update UI
+      setQueues(prev => prev.filter(q => q.id !== id))
+      setSelected(null)
+
+    } catch (err) {
+      console.error('Delete complaint failed:', err)
+      alert('Gagal menghapus aduan')
+    }
+  }
+
 
 
   const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const file = e.target.files[0]
+    if (!file) return
 
-    if (!file.type.startsWith("image/")) {
-      alert("File harus berupa gambar");
-      return;
+    if (!file.type.startsWith('image/')) {
+      alert('File harus berupa gambar')
+      return
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPreviewImage(reader.result);
-    };
-    reader.readAsDataURL(file);
-  };
+    setImageFile(file)
+    setPreviewImage(URL.createObjectURL(file))
+  }
+
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -419,32 +459,30 @@ export default function App() {
       return;
     }
 
-    let imageUrl = null;
+    let imageUrl = null
+    let imagePath = null
 
     try {
       // ============================
       // UPLOAD IMAGE (JIKA ADA)
       // ============================
-      if (previewImage) {
-        const response = await fetch(previewImage);
-        const blob = await response.blob();
+      if (imageFile) {
+        // 🔥 COMPRESS DI SINI
+        const compressedFile = await compressImageIfNeeded(imageFile)
 
-        const fileExt = blob.type.split('/')[1] || 'png';
-        const fileName = `complaints/${Date.now()}.${fileExt}`;
+        const fileExt = compressedFile.name.split('.').pop()
+        imagePath = `complaints/${Date.now()}.${fileExt}`
 
         const { error: uploadError } = await supabase.storage
           .from('complaints')
-          .upload(fileName, blob, {
-            cacheControl: '3600',
-            upsert: false
-          });
+          .upload(imagePath, compressedFile)
 
-        if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError
 
         imageUrl = supabase.storage
           .from('complaints')
-          .getPublicUrl(fileName)
-          .data.publicUrl;
+          .getPublicUrl(imagePath)
+          .data.publicUrl
       }
 
       // ============================
@@ -458,7 +496,8 @@ export default function App() {
             title: e.target.title.value,
             location: e.target.location.value,
             description: e.target.description.value,
-            image_url: imageUrl, // <-- NULL jika tidak ada gambar
+            image_path: imagePath,
+            image_url: imageUrl,
             status: 'Menunggu',
             user_id: currentUser.id
           }
@@ -473,6 +512,7 @@ export default function App() {
       // ============================
       setQueues(prev => [data, ...prev]);
       setPreviewImage(null);
+      setImageFile(null)
       setView('queue_list');
 
       triggerNotification(
@@ -486,6 +526,7 @@ export default function App() {
     }
 
   };
+
 
   const filteredQueues = queues.filter(q => {
     if (user && currentUser.level_id === 3) return q.requester === currentUser.pemilik_name;
@@ -522,8 +563,6 @@ export default function App() {
 
     return false;
   });
-
-
 
   const CurrentViewIcon = selected ? List : (menuConfig[view]?.icon || Shield);
 
@@ -638,11 +677,8 @@ export default function App() {
                 <div>
                   <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md mb-2 inline-block tracking-tighter">{selected.request_code}</span>
                   <h2 className="text-2xl font-black text-slate-900 leading-tight">
-                    {selected && (
-                      <div>
-                        <h2>{selected.title}</h2>
-                      </div>
-                    )}</h2>
+                    {selected.title}
+                  </h2>
                 </div>
                 <Badge status={selected.status} />
               </div>
@@ -663,14 +699,21 @@ export default function App() {
                   <p className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-widest">Deskripsi Laporan</p>
                   <p className="text-slate-600 leading-relaxed font-medium">{selected.description}</p>
                   {/* PREVIEW IMAGE DI BAWAH DESKRIPSI */}
-                  {selected?.image && (
+                  {selected?.image_url && (
                     <div className="mt-6 bg-slate-50 p-4 rounded-2xl">
                       <img
-                        src={selected.image}
+                        src={selected.image_url}
                         alt="Foto Pendukung"
-                        className="w-full max-h-[420px] object-contain rounded-xl"
+                        className="w-full max-h-[420px] object-contain rounded-xl cursor-zoom-in"
+                        loading="lazy"
+                        onClick={() => window.open(selected.image_url, '_blank')}
                       />
                     </div>
+                  )}
+                  {!selected?.image_url && (
+                    <p className="mt-4 text-xs italic text-slate-400">
+                      Tidak ada foto pendukung
+                    </p>
                   )}
                 </div>
 
