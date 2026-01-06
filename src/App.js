@@ -245,10 +245,36 @@ export default function App() {
     }
   };
 
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault();
-    alert('Fitur tambah user akan menggunakan Supabase');
+
+    if (newUserForm.password !== newUserForm.confirmPassword) {
+      alert("Konfirmasi password tidak cocok");
+      return;
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .insert({
+        username: newUserForm.username,
+        password: newUserForm.password,
+        pemilik_name: newUserForm.pemilik_name,
+        level_id: newUserForm.level_id,
+        job_id: newUserForm.job_id
+      });
+
+    if (error) {
+      console.error("Supabase error:", error);
+      alert("Gagal menyimpan user:\n" + error.message);
+      return;
+    } else {
+      alert("User berhasil ditambahkan");
+      setNewUserForm(emptyUserForm);
+    }
   };
+
+
+
 
   // Push Notification Logic
   const triggerNotification = (title, body) => {
@@ -388,88 +414,78 @@ export default function App() {
   const handleCreate = async (e) => {
     e.preventDefault();
 
-    if (!currentUser) return alert("User belum login.");
+    if (!currentUser) {
+      alert("User belum login.");
+      return;
+    }
 
     let imageUrl = null;
 
     try {
-      // 1️⃣ Upload image ke bucket jika ada
+      // ============================
+      // UPLOAD IMAGE (JIKA ADA)
+      // ============================
       if (previewImage) {
-        // previewImage berupa base64, kita perlu convert ke Blob
         const response = await fetch(previewImage);
         const blob = await response.blob();
-        const fileName = `images/${Date.now()}_${blob.name || 'upload.png'}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('complaints') // nama bucket
-          .upload(fileName, blob, { cacheControl: '3600', upsert: false });
+        const fileExt = blob.type.split('/')[1] || 'png';
+        const fileName = `complaints/${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('complaints')
+          .upload(fileName, blob, {
+            cacheControl: '3600',
+            upsert: false
+          });
 
         if (uploadError) throw uploadError;
 
-        // 2️⃣ Ambil public URL
         imageUrl = supabase.storage
           .from('complaints')
-          .getPublicUrl(uploadData.path).data.publicUrl;
+          .getPublicUrl(fileName)
+          .data.publicUrl;
       }
 
-      // 3️⃣ Insert row ke tabel complaints
-      const { data: complaintData, error: insertError } = await supabase
+      // ============================
+      // INSERT COMPLAINT (IMAGE OPTIONAL)
+      // ============================
+      const { data, error } = await supabase
         .from('complaints')
-        .insert([{
-          id: `REQ-${Math.floor(100 + Math.random() * 900)}`,
-          title: e.target.title.value,
-          location: e.target.location.value,
-          description: e.target.description.value,
-          image: imageUrl,           // URL dari bucket
-          status: 'Menunggu',
-          requester: currentUser.id, // pakai user id
-          date: new Date().toISOString()
-        }]);
+        .insert([
+          {
+            request_code: `REQ-${Math.floor(100 + Math.random() * 900)}`,
+            title: e.target.title.value,
+            location: e.target.location.value,
+            description: e.target.description.value,
+            image_url: imageUrl, // <-- NULL jika tidak ada gambar
+            status: 'Menunggu',
+            user_id: currentUser.id
+          }
+        ])
+        .select()
+        .single();
 
-      if (insertError) throw insertError;
+      if (error) throw error;
 
-      // 4️⃣ Update UI lokal
-      setQueues([complaintData[0], ...queues]);
+      // ============================
+      // UPDATE UI
+      // ============================
+      setQueues(prev => [data, ...prev]);
       setPreviewImage(null);
       setView('queue_list');
 
-      // 5️⃣ Notifikasi
       triggerNotification(
         "Aduan Baru Masuk!",
-        `${currentUser.pemilik_name} melaporkan: ${e.target.title.value} di ${e.target.location.value}`
+        `${currentUser.pemilik_name} melaporkan: ${data.title}`
       );
 
     } catch (err) {
-      console.error("Gagal menyimpan aduan:", err.message);
-      alert("Gagal menyimpan aduan: " + err.message);
+      console.error("FULL ERROR OBJECT:", err);
+      alert("Gagal menyimpan aduan:\n" + (err?.message || JSON.stringify(err)));
     }
+
   };
-
-
-
-  /*const handleAddUser = (e) => {
-    e.preventDefault();
-    const alphaRegex = /^[A-Za-z]+$/;
-    const alphanumericNoSymbolRegex = /^[A-Za-z0-9]+$/;
-
-    if (!alphaRegex.test(newUserForm.username)) return alert("Username hanya boleh huruf.");
-    if (newUserForm.username.length > 20) return alert("Username maksimal 20 karakter.");
-    if (!alphanumericNoSymbolRegex.test(newUserForm.password)) return alert("Password hanya boleh huruf dan angka.");
-    if (newUserForm.password !== newUserForm.confirmPassword) return alert("Konfirmasi password tidak cocok.");
-
-    const newUser = {
-      user_id: users.length + 1,
-      username: newUserForm.username,
-      password: newUserForm.password,
-      pemilik_name: newUserForm.pemilik_name,
-      level_id: parseInt(newUserForm.level_id),
-      job_id: newUserForm.job_id
-    };
-
-    setUsers([...users, newUser]);
-    alert("User berhasil ditambahkan!");
-    setNewUserForm(emptyUserForm);
-  };*/
 
   const filteredQueues = queues.filter(q => {
     if (user && currentUser.level_id === 3) return q.requester === currentUser.pemilik_name;
@@ -620,7 +636,7 @@ export default function App() {
 
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md mb-2 inline-block tracking-tighter">{selected.id}</span>
+                  <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md mb-2 inline-block tracking-tighter">{selected.request_code}</span>
                   <h2 className="text-2xl font-black text-slate-900 leading-tight">
                     {selected && (
                       <div>
@@ -761,9 +777,9 @@ export default function App() {
                     <p className="text-slate-400 font-bold">Belum ada aduan masuk</p>
                   </div>
                 ) : filteredQueues.map(q => (
-                  <div key={q.id} onClick={() => setSelected(q)} className="bg-white p-5 rounded-[2rem] border border-slate-50 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95">
+                  <div key={q.request_code} onClick={() => setSelected(q)} className="bg-white p-5 rounded-[2rem] border border-slate-50 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95">
                     <div className="flex justify-between items-start mb-3">
-                      <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg tracking-tighter uppercase">{q.id}</span>
+                      <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg tracking-tighter uppercase">{q.request_code}</span>
                       <Badge status={q.status} />
                     </div>
                     <h3 className="text-lg font-black text-slate-800 group-hover:text-blue-700 transition-colors leading-tight mb-2">{q.title}</h3>
