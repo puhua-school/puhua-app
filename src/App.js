@@ -806,13 +806,13 @@ export default function App() {
                   </div>
                 ) : taskQueues.map(q => (
                   <div
-                    key={q.id}
+                    key={q.request_code}
                     onClick={() => setSelected(q)}
                     className="bg-white p-5 rounded-[2rem] border border-slate-50 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95"
                   >
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg tracking-tighter uppercase">
-                        {q.id}
+                        {q.request_code}
                       </span>
                       <Badge status={q.status} />
                     </div>
