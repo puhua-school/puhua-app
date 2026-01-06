@@ -351,18 +351,31 @@ export default function App() {
     }
   };
 
-
-
-
   // Push Notification Logic
-  const triggerNotification = (title, body) => {
-    if (Notification.permission === "granted") {
-      new Notification(title, {
+  const triggerNotification = async (title, body) => {
+    // pastikan Notification API tersedia
+    if (!('Notification' in window)) return
+
+    // pastikan izin sudah diberikan
+    if (Notification.permission !== 'granted') return
+
+    // wajib service worker
+    if (!('serviceWorker' in navigator)) return
+
+    try {
+      const registration = await navigator.serviceWorker.getRegistration()
+      if (!registration) return
+
+      await registration.showNotification(title, {
         body,
-        icon: '/image/puhua_logo.png'
-      });
+        icon: '/image/puhua_logo.png',
+        badge: '/image/puhua_logo.png',
+        vibrate: [200, 100, 200]
+      })
+    } catch (err) {
+      console.warn('Notification skipped:', err.message)
     }
-  };
+  }
 
   const emptyUserForm = {
     username: '',
