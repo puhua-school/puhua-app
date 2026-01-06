@@ -206,6 +206,8 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [imageFile, setImageFile] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+
 
 
   // Load Session & Notifikasi
@@ -242,17 +244,21 @@ export default function App() {
     fetchJobs();
   }, []);
 
-  useEffect(() => {
-    const fetchQueues = async () => {
-      const { data, error } = await supabase
-        .from('complaints')
-        .select('*')
-        .order('created_at', { ascending: false });
+  const fetchQueues = async () => {
+    setIsLoading(true)
+    const { data, error } = await supabase
+      .from('complaints')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-      if (!error) setQueues(data);
-    };
-    fetchQueues();
-  }, []);
+    if (!error) setQueues(data)
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    fetchQueues()
+  }, [])
+
 
   // Request Notification Permission
   const requestNotify = () => {
@@ -576,6 +582,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
+      {isLoading && (
+        <div className="fixed inset-0 z-[999] bg-white/70 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              Memuat data...
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="
     min-h-screen
     bg-white
@@ -631,7 +648,17 @@ export default function App() {
                   cfg.levels.includes(currentUser.level_id) && (
                     <button
                       key={key}
-                      onClick={() => { setView(key); setMenuOpen(false); setSelected(null); }}
+                      onClick={async () => {
+                        setMenuOpen(false)
+                        setSelected(null)
+                        setView(key)
+
+                        // refresh data saat pindah menu
+                        if (key === 'queue_list' || key === 'task_list' || key === 'dashboard') {
+                          await fetchQueues()
+                        }
+                      }}
+
                       className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all font-bold text-sm ${view === key && !selected ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
                       <cfg.icon size={20} />
@@ -820,7 +847,12 @@ export default function App() {
                     <p className="text-slate-400 font-bold">Belum ada aduan masuk</p>
                   </div>
                 ) : filteredQueues.map(q => (
-                  <div key={q.request_code} onClick={() => setSelected(q)} className="bg-white p-5 rounded-[2rem] border border-slate-50 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95">
+                  <div key={q.request_code} onClick={async () => {
+                    setIsLoading(true)
+                    await fetchQueues()
+                    setSelected(q)
+                    setIsLoading(false)
+                  }} className="bg-white p-5 rounded-[2rem] border border-slate-50 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95">
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg tracking-tighter uppercase">{q.request_code}</span>
                       <Badge status={q.status} />
@@ -850,7 +882,14 @@ export default function App() {
                 ) : taskQueues.map(q => (
                   <div
                     key={q.request_code}
-                    onClick={() => setSelected(q)}
+                    onClick={async () => {
+                      setIsLoading(true)
+                      await fetchQueues()
+                      setSelected(q)
+                      setIsLoading(false)
+                    }}
+
+
                     className="bg-white p-5 rounded-[2rem] border border-slate-50 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95"
                   >
                     <div className="flex justify-between items-start mb-3">
