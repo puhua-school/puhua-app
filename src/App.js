@@ -211,41 +211,29 @@ export default function App() {
 
 
   // Load Session & Notifikasi
+  // 1. Cek Login Session
   useEffect(() => {
-    // 1. Cek Login Session
-    useEffect(() => {
-      const savedSession = localStorage.getItem('puhua_session')
-      if (!savedSession) return
+    const savedSession = localStorage.getItem('puhua_session')
+    if (!savedSession) return
 
-      const { user: userData, expiry, lastActivity } = JSON.parse(savedSession)
-      const now = Date.now()
+    const session = JSON.parse(savedSession)
+    const now = Date.now()
 
-      // ❌ session habis total
-      if (now > expiry) {
-        localStorage.removeItem('puhua_session')
-        setCurrentUser(null)
-        return
-      }
-
-      // ❌ idle > 2 jam
-      if (now - lastActivity > 2 * 60 * 60 * 1000) {
-        localStorage.removeItem('puhua_session')
-        setCurrentUser(null)
-        return
-      }
-
-      // ✅ session masih valid
-      setCurrentUser(userData)
-    }, [])
-
-
-    // 2. Minta Izin Notifikasi
-    if ("Notification" in window) {
-      setNotificationPermission(Notification.permission);
+    if (now > session.expiry) {
+      localStorage.removeItem('puhua_session')
+      setCurrentUser(null)
+      return
     }
 
+    if (now - session.lastActivity > 2 * 60 * 60 * 1000) {
+      localStorage.removeItem('puhua_session')
+      setCurrentUser(null)
+      return
+    }
 
-  }, []);
+    setCurrentUser(session.user)
+  }, [])
+
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -391,7 +379,7 @@ export default function App() {
     setSelected(null);
     setView('dashboard');
     setUser(userData);
-
+  
     if (remember) {
       const expiry = new Date().getTime() + (10 * 24 * 60 * 60 * 1000); // 10 Hari
       localStorage.setItem('puhua_session', JSON.stringify({ user: userData, expiry }));
@@ -410,42 +398,37 @@ export default function App() {
       pemilik_name,
       level_id,
       job_id,
-      jobs (
-        name
-      )
+      jobs ( name )
     `)
       .eq('username', username)
       .eq('password', password)
-      .maybeSingle();
+      .maybeSingle()
 
     if (error || !data) {
-      alert('Username atau password salah');
-      return;
+      alert('Username atau password salah')
+      return
     }
 
     const userData = {
       ...data,
       job_name: data.jobs?.name || ''
-    };
-
-    setCurrentUser(userData);
-
-    if (remember) {
-      const expiry = new Date().getTime() + (10 * 24 * 60 * 60 * 1000);
-      const now = Date.now()
-      const expiry = now + (2 * 60 * 60 * 1000) // 2 JAM
-
-      localStorage.setItem(
-        'puhua_session',
-        JSON.stringify({
-          user: userData,
-          expiry,
-          lastActivity: now
-        })
-      )
-
     }
-  };
+
+    const now = Date.now()
+
+    const session = {
+      user: userData,
+      remember,
+      expiry: remember
+        ? now + (10 * 24 * 60 * 60 * 1000) // 10 hari
+        : now + (2 * 60 * 60 * 1000),     // 2 jam
+      lastActivity: now
+    }
+
+    localStorage.setItem('puhua_session', JSON.stringify(session))
+    setCurrentUser(userData)
+  }
+
 
   const handleLogout = () => {
     localStorage.removeItem('puhua_session');
