@@ -62,6 +62,7 @@ const LoginPage = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // kunci scroll saat login muncul
@@ -102,9 +103,11 @@ const LoginPage = ({ onLogin }) => {
         <p className="text-gray-400 mt-2 text-sm font-medium">Silakan masuk untuk melapor</p>
       </div>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          onLogin(username, password, rememberMe);
+          setLoading(true);
+          await onLogin(username, password, rememberMe);
+          setLoading(false);
         }} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center gap-2">
@@ -146,7 +149,15 @@ const LoginPage = ({ onLogin }) => {
         </div>
 
         <div className="pt-4">
-          <Button type="submit" className="py-4 text-lg">MASUK</Button>
+          <Button type="submit" disabled={loading} className="py-4 text-lg">
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Memverifikasi...
+              </>
+            ) : 'MASUK'}
+          </Button>
+
         </div>
       </form>
     </div>
@@ -185,6 +196,30 @@ export async function compressImageIfNeeded(file) {
   }
 }
 
+const AdminDropdownCard = ({ title, icon: Icon, open, onToggle, children }) => (
+  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+    <button
+      onClick={onToggle}
+      className="w-full flex justify-between items-center px-5 py-4 bg-slate-50 text-slate-600 text-xs font-black uppercase tracking-widest"
+    >
+      <div className="flex items-center gap-3">
+        <Icon size={16} />
+        {title}
+      </div>
+      <ChevronRight
+        size={18}
+        className={`transition-transform ${open ? 'rotate-90' : ''}`}
+      />
+    </button>
+
+    {open && (
+      <div className="px-5 py-4 animate-in fade-in slide-in-from-top duration-200">
+        {children}
+      </div>
+    )}
+  </div>
+);
+
 /**
  * HALAMAN UTAMA
  */
@@ -205,9 +240,26 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [jobs, setJobs] = useState([]);
-  const [imageFile, setImageFile] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [imageFile, setImageFile] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false)
 
+  const [openAddUser, setOpenAddUser] = useState(false);
+  const [openMenuAccess, setOpenMenuAccess] = useState(false);
+
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+
+  // aktivitas yang dianggap "hidup"
+  const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart']
+
+  const statusOptions = [
+    { value: 'ALL', label: 'Semua Aduan' },
+    { value: 'Menunggu', label: 'Menunggu' },
+    { value: 'Sedang Dikerjakan', label: 'Sedang Dikerjakan' },
+    { value: 'Menunggu Verifikasi', label: 'Menunggu Verifikasi' },
+    { value: 'Selesai', label: 'Selesai' }
+  ];
 
 
   // Load Session & Notifikasi
@@ -232,8 +284,7 @@ export default function App() {
     }
 
     setCurrentUser(session.user)
-  }, [])
-
+  }, []);
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -262,10 +313,7 @@ export default function App() {
           lastActivity: Date.now()
         })
       )
-    }
-
-    // aktivitas yang dianggap "hidup"
-    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart']
+    };
 
     events.forEach(event =>
       window.addEventListener(event, updateActivity)
@@ -276,7 +324,7 @@ export default function App() {
         window.removeEventListener(event, updateActivity)
       )
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -296,31 +344,62 @@ export default function App() {
     }, 60 * 1000) // cek tiap 1 menit
 
     return () => clearInterval(interval)
-  }, [])
+  }, []);
+
+  useEffect(() => {
+    fetchQueues()
+  }, []);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then(() => console.log('SW registered'))
+        .catch(err => console.error('SW failed', err));
+    }
+  }, []);
 
   const fetchQueues = async () => {
     setIsLoading(true)
     const { data, error } = await supabase
       .from('complaints')
-      .select('*')
+      .select(`
+  id,
+  user_id,
+  request_code,
+  title,
+  location,
+  status,
+  image_path,
+  image_url,
+  created_at,
+  description
+`)
+
       .order('created_at', { ascending: false })
 
     if (!error) setQueues(data)
     setIsLoading(false)
-  }
-
-  useEffect(() => {
-    fetchQueues()
-  }, [])
-
+  };
 
   // Request Notification Permission
-  const requestNotify = () => {
-    if ("Notification" in window) {
-      Notification.requestPermission().then(permission => {
-        setNotificationPermission(permission);
-      });
+  const requestNotify = async () => {
+    if (!('Notification' in window)) {
+      alert('Notifikasi tidak didukung di perangkat ini');
+      return;
     }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+
+    if (permission !== 'granted') {
+      alert('Izin notifikasi ditolak');
+    }
+  };
+
+  const goToQueueListWithFilter = (filter) => {
+    setSelected(null);
+    setStatusFilter(filter);
+    setView('queue_list');
   };
 
   const handleAddUser = async (e) => {
@@ -351,31 +430,25 @@ export default function App() {
     }
   };
 
-  // Push Notification Logic
   const triggerNotification = async (title, body) => {
-    // pastikan Notification API tersedia
-    if (!('Notification' in window)) return
+    if (Notification.permission !== 'granted') return;
 
-    // pastikan izin sudah diberikan
-    if (Notification.permission !== 'granted') return
+    const registration = await navigator.serviceWorker.ready;
 
-    // wajib service worker
-    if (!('serviceWorker' in navigator)) return
+    registration.showNotification(title, {
+      body,
+      icon: '/image/puhua_logo.png',
+      badge: '/image/puhua_logo.png',
+      vibrate: [200, 100, 200],
+      tag: 'puhua-notification'
+    });
+  };
 
-    try {
-      const registration = await navigator.serviceWorker.getRegistration()
-      if (!registration) return
+  const goToQueueList = () => {
+    setSelected(null);
+    setView('queue_list');
+  };
 
-      await registration.showNotification(title, {
-        body,
-        icon: '/image/puhua_logo.png',
-        badge: '/image/puhua_logo.png',
-        vibrate: [200, 100, 200]
-      })
-    } catch (err) {
-      console.warn('Notification skipped:', err.message)
-    }
-  }
 
   const emptyUserForm = {
     username: '',
@@ -387,17 +460,6 @@ export default function App() {
   };
 
   const [newUserForm, setNewUserForm] = useState(emptyUserForm);
-
-  /*const handleLogin = (userData, remember) => {
-    setSelected(null);
-    setView('dashboard');
-    setUser(userData);
-  
-    if (remember) {
-      const expiry = new Date().getTime() + (10 * 24 * 60 * 60 * 1000); // 10 Hari
-      localStorage.setItem('puhua_session', JSON.stringify({ user: userData, expiry }));
-    }
-  };*/
 
   // ===============================
   // HANDLE LOGIN (SUPABASE)
@@ -511,8 +573,6 @@ export default function App() {
     }
   }
 
-
-
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -538,6 +598,7 @@ export default function App() {
     let imageUrl = null
     let imagePath = null
 
+    setSubmitLoading(true)
     try {
       // ============================
       // UPLOAD IMAGE (JIKA ADA)
@@ -595,19 +656,23 @@ export default function App() {
         "Aduan Baru Masuk!",
         `${currentUser.pemilik_name} melaporkan: ${data.title}`
       );
-
     } catch (err) {
+      setSubmitLoading(false)
       console.error("FULL ERROR OBJECT:", err);
       alert("Gagal menyimpan aduan:\n" + (err?.message || JSON.stringify(err)));
     }
 
   };
 
-
   const filteredQueues = queues.filter(q => {
     if (user && currentUser.level_id === 3) return q.requester === currentUser.pemilik_name;
     return true;
   });
+
+  const displayedQueues = statusFilter === 'ALL'
+    ? filteredQueues
+    : filteredQueues.filter(q => q.status === statusFilter);
+
 
   const taskQueues = filteredQueues.filter(q => {
     // user belum siap
@@ -837,12 +902,16 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm transition-transform active:scale-95">
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm transition-transform active:scale-95"
+                  onClick={() => goToQueueListWithFilter('ALL')}
+                >
                   <ClipboardList size={24} className="text-blue-600 mb-4" />
                   <p className="text-xl sm:text-2xl font-black text-slate-800 leading-none">{filteredQueues.length}</p>
                   <p className="text-[10px] font-black text-slate-300 uppercase mt-2 tracking-widest">Total Aduan</p>
                 </div>
-                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm transition-transform active:scale-95">
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm transition-transform active:scale-95"
+                  onClick={() => goToQueueListWithFilter('Selesai')}
+                >
                   <CheckCircle2 size={24} className="text-emerald-500 mb-4" />
                   <p className="text-xl sm:text-2xl font-black text-slate-800 leading-none">{filteredQueues.filter(q => q.status === 'Selesai').length}</p>
                   <p className="text-[10px] font-black text-slate-300 uppercase mt-2 tracking-widest">Selesai</p>
@@ -860,19 +929,50 @@ export default function App() {
               <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-slate-400 font-black text-xs uppercase tracking-widest mb-6 active:scale-95 transition-transform">
                 <ArrowLeft size={16} /> Batal
               </button>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter mb-8">Buat Aduan</h2>
               <form onSubmit={handleCreate} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Judul Aduan</label>
-                  <input name="title" required className="w-full p-4 bg-white border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none shadow-sm font-bold transition-all" placeholder="Apa masalahnya?" />
+                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                    Judul Aduan
+                  </label>
+
+                  <input name="title" required
+                    className="
+                    w-full px-3 py-2
+                    rounded-xl
+                   bg-white
+                    border border-slate-100 
+                    text-sm font-medium
+                    focus:ring-2 focus:ring-blue-600 outline-none shadow-sm" placeholder="Apa masalahnya?"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Lokasi Kejadian</label>
-                  <input name="location" required className="w-full p-4 bg-white border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none shadow-sm font-bold transition-all" placeholder="Di mana lokasinya?" />
+                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                    Lokasi Kejadian
+                  </label>
+
+                  <input name="location" required
+                    className="
+                    w-full px-3 py-2
+                    rounded-xl
+                    bg-white
+                    border border-slate-100 
+                    text-sm font-medium
+                    focus:ring-2 focus:ring-blue-600 outline-none shadow-sm" placeholder="Dimana Lokasinya?"
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Deskripsi Detail</label>
-                  <textarea name="description" required className="w-full p-4 bg-white border border-slate-100 rounded-2xl h-32 focus:ring-2 focus:ring-blue-600 outline-none shadow-sm font-medium transition-all resize-none" placeholder="Ceritakan detail masalahnya..."></textarea>
+                  <textarea name="description" required
+                    className="
+                    w-full px-3 py-2
+                    rounded-xl
+                     bg-white
+                    border border-slate-100
+                    text-sm
+                    h-24 font-medium
+                    resize-none
+                    focus:ring-2 focus:ring-blue-600 outline-none shadow-sm" placeholder="Ceritakan detail masalahnya..."
+                  />
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">
                       Foto Pendukung (Opsional)
@@ -901,25 +1001,72 @@ export default function App() {
 
                 </div>
                 <div className="pt-4">
-                  <Button type="submit" className="py-5 text-base rounded-[2rem] shadow-xl">KIRIM LAPORAN SEKARANG</Button>
+                  <Button type="submit" disabled={submitLoading} className="py-2.5 text-sm rounded-xl">
+                    {submitLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Mengirim...
+                      </>
+                    ) : 'KIRIM LAPORAN SEKARANG'}
+                  </Button>
+
                 </div>
               </form>
             </div>
           ) : view === 'queue_list' ? (
             <div className="animate-in fade-in duration-500 space-y-6">
-              <div className="flex justify-between items-end">
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter">Daftar Aduan</h2>
+              <div className="flex items-center justify-between mb-4">
+
+                <button
+                  onClick={() => setView('dashboard')}
+                  className="
+      flex items-center gap-2
+      text-slate-400
+      font-black text-xs uppercase tracking-widest
+      hover:text-slate-600
+      active:scale-95
+      transition-transform"
+                >
+                  <ArrowLeft size={16} />
+                  Kembali
+                </button>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="
+      px-3 py-2
+      rounded-xl
+      bg-white
+      border border-slate-100
+      text-sm font-medium
+      text-slate-600
+      focus:ring-2 focus:ring-blue-600
+      outline-none
+      cursor-pointer"
+                >
+                  {statusOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+
               </div>
+
+
               <div className="space-y-4">
-                {filteredQueues.length === 0 ? (
+                {displayedQueues.length === 0 ? (
                   <div className="py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200">
                     <AlertCircle className="mx-auto text-slate-200 mb-4" size={48} />
-                    <p className="text-slate-400 font-bold">Belum ada aduan masuk</p>
+                    <p className="text-slate-400 font-bold text-sm">
+                      Tidak ada aduan dengan status ini
+                    </p>
                   </div>
-                ) : filteredQueues.map(q => (
+                ) : displayedQueues.map(q => (
                   <div key={q.request_code} onClick={async () => {
                     setIsLoading(true)
-                    await fetchQueues()
+                    //await fetchQueues()
                     setSelected(q)
                     setIsLoading(false)
                   }} className="bg-white p-5 rounded-[2rem] border border-slate-50 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95">
@@ -935,12 +1082,9 @@ export default function App() {
             </div>
           ) : view === 'task_list' ? (
             <div className="animate-in fade-in duration-500 space-y-6">
-              <div className="flex justify-between items-end">
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter">
-                  Tugas Saya
-                </h2>
-              </div>
-
+              <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-slate-400 font-black text-xs uppercase tracking-widest mb-6 active:scale-95 transition-transform">
+                <ArrowLeft size={16} /> Kembali
+              </button>
               <div className="space-y-4">
                 {taskQueues.length === 0 ? (
                   <div className="py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200">
@@ -954,11 +1098,10 @@ export default function App() {
                     key={q.request_code}
                     onClick={async () => {
                       setIsLoading(true)
-                      await fetchQueues()
+                      //await fetchQueues()
                       setSelected(q)
                       setIsLoading(false)
                     }}
-
 
                     className="bg-white p-5 rounded-[2rem] border border-slate-50 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95"
                   >
@@ -982,111 +1125,129 @@ export default function App() {
             </div>
 
           ) : view === 'admin_settings' ? (
-            <div className="animate-in fade-in duration-500 space-y-8">
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tighter">Manajemen Sistem</h2>
+            <div className="animate-in fade-in duration-500 space-y-4">
 
-              <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-                <div className="p-6 bg-blue-700 flex items-center gap-3 text-white">
-                  <UserPlus size={18} />
-                  <h3 className="text-sm font-black uppercase tracking-widest">Tambah Pengguna Baru</h3>
-                </div>
-                <form onSubmit={handleAddUser} className="p-6 space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Username</label>
+              {/* TAMBAH PENGGUNA */}
+              <AdminDropdownCard
+                title="Tambah Pengguna"
+                icon={UserPlus}
+                open={openAddUser}
+                onToggle={() => setOpenAddUser(!openAddUser)}
+              >
+                <form onSubmit={handleAddUser} className="space-y-3">
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                      Username
+                    </label>
                     <input
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 text-sm"
                       value={newUserForm.username}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
-                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold transition-all"
-                      placeholder="Username" required
+                      onChange={e => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                      required
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Nama Pemilik</label>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                      Nama Pemilik
+                    </label>
                     <input
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 text-sm"
                       value={newUserForm.pemilik_name}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, pemilik_name: e.target.value })}
-                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold transition-all"
-                      placeholder="Nama Lengkap" required
+                      onChange={e => setNewUserForm({ ...newUserForm, pemilik_name: e.target.value })}
+                      required
                     />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Password</label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                        Password
+                      </label>
                       <input
                         type="password"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 text-sm"
                         value={newUserForm.password}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold transition-all"
-                        placeholder="••••••" required
+                        onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                        required
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Konfirmasi</label>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                        Konfirmasi
+                      </label>
                       <input
                         type="password"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 text-sm"
                         value={newUserForm.confirmPassword}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, confirmPassword: e.target.value })}
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold transition-all"
-                        placeholder="••••••" required
+                        onChange={e => setNewUserForm({ ...newUserForm, confirmPassword: e.target.value })}
+                        required
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Level Akses</label>
-                      <div className="relative">
-                        <select
-                          value={newUserForm.level_id}
-                          onChange={(e) => setNewUserForm({ ...newUserForm, level_id: e.target.value })}
-                          className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold appearance-none transition-all cursor-pointer"
-                        >
-                          <option value="1">Administrator</option>
-                          <option value="2">Eksekutor</option>
-                          <option value="3">Umum</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Pekerjaan</label>
-                      <select
-                        value={newUserForm.job_id}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, job_id: e.target.value })}
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold appearance-none transition-all cursor-pointer"
-                      >
-                        {jobs.map(job => (
-                          <option key={job.id} value={job.id}>
-                            {job.name}
-                          </option>
-                        ))}
 
-                      </select>
-                    </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <select
+                      className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 text-sm"
+                      value={newUserForm.level_id}
+                      onChange={e => setNewUserForm({ ...newUserForm, level_id: e.target.value })}
+                    >
+                      <option value="1">Admin</option>
+                      <option value="2">Petugas</option>
+                      <option value="3">Umum</option>
+                    </select>
+
+                    <select
+                      className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 text-sm"
+                      value={newUserForm.job_id}
+                      onChange={e => setNewUserForm({ ...newUserForm, job_id: e.target.value })}
+                    >
+                      {jobs.map(job => (
+                        <option key={job.id} value={job.id}>{job.name}</option>
+                      ))}
+                    </select>
                   </div>
-                  <Button type="submit" className="mt-4 py-4 rounded-2xl shadow-lg active:scale-95 transition-transform">SIMPAN PENGGUNA</Button>
-                </form>
-              </div>
 
-              <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden mb-10">
-                <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
-                  <Lock size={18} className="text-slate-400" />
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Hak Akses Menu</h3>
-                </div>
-                <div className="divide-y divide-slate-50">
+                  <Button type="submit" className="py-2 text-sm rounded-xl">
+                    Simpan Pengguna
+                  </Button>
+                </form>
+              </AdminDropdownCard>
+
+              {/* HAK AKSES MENU */}
+              <AdminDropdownCard
+                title="Hak Akses Menu"
+                icon={Lock}
+                open={openMenuAccess}
+                onToggle={() => setOpenMenuAccess(!openMenuAccess)}
+              >
+                <div className="space-y-4">
                   {Object.entries(menuConfig).map(([key, cfg]) => (
-                    <div key={key} className="p-6 space-y-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-blue-600"><cfg.icon size={16} /></div>
-                        <span className="font-black text-slate-700 text-sm">{cfg.label}</span>
-                      </div>
+                    <div key={key} className="space-y-2">
+                      <p className="text-xs font-black text-slate-600">
+                        {cfg.label}
+                      </p>
+
                       <div className="flex gap-2">
                         {[1, 2, 3].map(lvl => (
                           <button
                             key={lvl}
                             onClick={() => {
-                              const newLevels = cfg.levels.includes(lvl) ? cfg.levels.filter(l => l !== lvl) : [...cfg.levels, lvl];
-                              setMenuConfig({ ...menuConfig, [key]: { ...cfg, levels: newLevels } });
+                              const levels = cfg.levels.includes(lvl)
+                                ? cfg.levels.filter(l => l !== lvl)
+                                : [...cfg.levels, lvl];
+
+                              setMenuConfig({
+                                ...menuConfig,
+                                [key]: { ...cfg, levels }
+                              });
                             }}
-                            className={`flex-1 py-2 px-1 rounded-xl text-[9px] font-black border transition-all ${cfg.levels.includes(lvl) ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100' : 'bg-white border-slate-100 text-slate-300'}`}
+                            className={`flex-1 py-2 rounded-xl text-[10px] font-black transition-all
+                    ${cfg.levels.includes(lvl)
+                                ? 'bg-blue-600 text-white shadow'
+                                : 'bg-slate-100 text-slate-400'}`}
                           >
                             {lvl === 1 ? 'ADMIN' : lvl === 2 ? 'PETUGAS' : 'UMUM'}
                           </button>
@@ -1095,7 +1256,8 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </AdminDropdownCard>
+
             </div>
           ) : null}
         </div>
